@@ -1,17 +1,14 @@
 import unittest
-import index
+from photostack import app
 
 
 class TestHandlerCase(unittest.TestCase):
-
-    def test_response(self):
-        print("testing response.")
-        result = index.handler(None, None)
-        print(result)
-        self.assertEqual(result['statusCode'], 200)
-        self.assertEqual(result['headers']['Content-Type'], 'application/json')
-        self.assertIn('Hello World', result['body'])
+    def test_unsupported_http_method_gives_error_response(self):
+        result = app.handler({"httpMethod": "UNSUPPORTED"}, None)
+        self.assertEqual(result["statusCode"], 400)
+        self.assertEqual(result["headers"]["Content-Type"], "application/json")
+        self.assertIn("Unsupported http method", result["body"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
