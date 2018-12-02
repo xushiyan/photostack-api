@@ -1,40 +1,98 @@
 AWSTemplateFormatVersion: 2010-09-09
 Transform:
-- AWS::Serverless-2016-10-31
-- AWS::CodeStar
+  - AWS::Serverless-2016-10-31
 
 Parameters:
-  ProjectId:
+  PhotosTableGSIName:
     Type: String
-    Description: CodeStar projectId used to associate new resources to team members
+    Default: PhotostackPhotosByUserIndex
 
 # Enable blue/green deployments using this Globals section. For instructions, see the AWS CodeStar User Guide:
 # https://docs.aws.amazon.com/codestar/latest/userguide/how-to-modify-serverless-project.html?icmpid=docs_acs_rm_tr
-#
-# Globals:
-#   Function:
-#     AutoPublishAlias: live
-#     DeploymentPreference:
-#       Enabled: true
-#       Type: Canary10Percent5Minutes
+Globals:
+  Function:
+    Runtime: python3.6
+    MemorySize: 512
+    Environment:
+      Variables:
+        TABLE_NAME:
+          Ref: PhotosTable
+        GSI_NAME:
+          Ref: PhotosTableGSIName
+  Api:
+    EndpointConfiguration: REGIONAL
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS,PUT,DELETE'"
+      AllowHeaders: "'*'"
+      AllowOrigin: "'*'"
 
 Resources:
-  HelloWorld:
+  PhotostackApi:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
-      Runtime: python3.6
-      Role:
-        Fn::ImportValue:
-          !Join ['-', [!Ref 'ProjectId', !Ref 'AWS::Region', 'LambdaTrustRole']]
+      Handler: app.handler
+      CodeUri: ./photostack
+      Timeout: 5
+      Policies:
+        - AWSLambdaExecute
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'dynamodb:BatchGetItem'
+                - 'dynamodb:BatchWriteItem'
+                - 'dynamodb:ConditionCheckItem'
+                - 'dynamodb:DeleteItem'
+                - 'dynamodb:GetItem'
+                - 'dynamodb:PutItem'
+                - 'dynamodb:Query'
+                - 'dynamodb:Scan'
+                - 'dynamodb:UpdateItem'
+              Resource:
+                - !GetAtt PhotosTable.Arn
+                - !Join ['/', [!GetAtt PhotosTable.Arn, 'index', '*']]
       Events:
-        GetEvent:
+        CreatePhoto:
           Type: Api
           Properties:
-            Path: /
-            Method: get
-        PostEvent:
-          Type: Api
-          Properties:
-            Path: /
+            Path: /photos
             Method: post
+        ListPhotos:
+          Type: Api
+          Properties:
+            Path: /photos
+            Method: get
+
+  PhotosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: uid
+          AttributeType: S
+        - AttributeName: crtTs
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      GlobalSecondaryIndexes:
+        - IndexName: !Ref PhotosTableGSIName
+          KeySchema:
+            - AttributeName: uid
+              KeyType: HASH
+            - AttributeName: crtTs
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+
+  PhotoStorage:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-photostorage
