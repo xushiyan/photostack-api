@@ -48,9 +48,19 @@ def list_photos(table, index_name, user_id):
     return {"items": resp["Items"]}
 
 
+def delete_photo(table, photo_id, user_id):
+    resp = table.delete_item(
+        Key={"id": photo_id},
+        ConditionExpression=Attr("uid").eq(user_id),
+        ReturnValues="ALL_OLD",
+    )
+    return resp["Attributes"]
+
+
 OPERATIONS = {
     "POST": lambda **kw: create_photo(table, kw.pop("user_id"), **kw),
     "GET": lambda **kw: list_photos(table, GSI_NAME, kw.pop("user_id")),
+    "DELETE": lambda **kw: delete_photo(table, kw.pop("id"), kw.pop("user_id")),
 }
 
 
